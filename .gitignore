@@ -176,8 +176,12 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 # project stuff
+.vscode/
 wandb
 output
 elysium*
 output
 *.pt
+checkpoints/
+datasets/
+outputs/

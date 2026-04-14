@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torch.utils.data._utils.collate import default_collate
-from transformers import AutoImageProcessor, AutoTokenizer
+from transformers import AutoImageProcessor, AutoTokenizer, LlamaTokenizer
 from transformers.image_processing_utils import BaseImageProcessor
 
 from data.processors.online_vqa_processor import OnlineVQAProcessor
@@ -63,7 +63,7 @@ class VideoLLMProcessor(object):
         key_mapping: dict = None,
         padding_side: str = "right",
         tokenizer: str = "",
-        trust_remote_code: bool = False,
+        trust_remote_code: bool = True,
         eos_token: str = None,
         max_seq_len: int = 512,
         max_prompt_len: int = 512,
@@ -123,7 +123,7 @@ class VideoLLMProcessor(object):
         # load tokenizer
         self.eos_token = eos_token
         local_path = tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = LlamaTokenizer.from_pretrained(
             local_path, use_fast=False, trust_remote_code=trust_remote_code
         )
         self.pad_id = self.tokenizer.pad_token_id or self.tokenizer.eos_token_id
@@ -157,14 +157,18 @@ class VideoLLMProcessor(object):
         self.clip_interval = clip_interval
 
     def preprocess(self, data_dict):
+        # print(">>> BEFORE PREPROCESS:", data_dict)
+
         for key in data_dict.keys():
             if isinstance(data_dict[key], np.ndarray):
                 data_dict[key] = data_dict[key].tolist()
 
         # frames preprocess
         if self.with_visual:
+            # print(">>> WITH VISUAL, frames before preprocess:", data_dict[self.frames_key])
             data_dict[self.frames_key] = data_dict[self.frames_key][: self.max_frames]
             self.sample_frames(data_dict)
+            # print(">>> WITH VISUAL, frames after preprocess:", data_dict[self.frames_key])
             frames = data_dict[self.frames_key]
             assert isinstance(frames, list)
             if isinstance(frames[0], (str, os.PathLike)):
@@ -205,9 +209,13 @@ class VideoLLMProcessor(object):
 
             self.add_vision_placeholders_in_prompt(data_dict)
         else:
+            # print(">>> WITHOUT VISUAL, set empty frames and add vision placeholder in prompt.")
             data_dict["input_prompt_template"] = self.input_prompt_template
             data_dict["label_prompt"] = self.label_prompt
             data_dict[self.frames_key] = []
+
+        # print(">>> AFTER PREPROCESS:", data_dict)
+
         return data_dict
 
     def transform(self, data_dict):
@@ -354,8 +362,7 @@ class VideoLLMProcessor(object):
         frames = data_dict[self.frames_key]
 
         if self.sample_method == "global_random":
-            # globally sample `self.num_segments` frames
-            frames_index = random_index(len(frames), self.num_segments, average_draw)
+            frames_index = random_index(len(frames), len(frames), average_draw)
             part_frames = [frames[i] for i in frames_index]
         elif self.sample_method == "global":
             part_frames = frames

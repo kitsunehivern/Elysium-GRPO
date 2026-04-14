@@ -104,8 +104,8 @@ class ElysiumForCausalLM(PreTrainedModel):
 
     def _setup_llm(self):
         # text encoder & load pretrained model
-        self.tokenizer = AutoTokenizer.from_pretrained(self.config.llm_config["pretrained_model_name_or_path"])
-        self.llm = AutoModelForCausalLM.from_pretrained(self.config.llm_config["pretrained_model_name_or_path"])
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.llm_config["pretrained_model_name_or_path"], trust_remote_code=True)
+        self.llm = AutoModelForCausalLM.from_pretrained(self.config.llm_config["pretrained_model_name_or_path"], trust_remote_code=True)
 
         # freeze llm if needed
         if self.config.llm_config["freeze_llm"]:

@@ -41,6 +41,18 @@ class TrainingArguments(transformers.TrainingArguments):
     remove_unused_columns: bool = field(default=False)
     visual_encoder_lr_scale: float = field(default=1.0)
 
+def to_jsonable(obj):
+    if isinstance(obj, torch.Tensor):
+        if obj.ndim == 0:
+            return obj.item()
+        return obj.detach().cpu().tolist()
+    elif isinstance(obj, dict):
+        return {k: to_jsonable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [to_jsonable(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return [to_jsonable(v) for v in obj]
+    return obj
 
 def parse_box_from_raw_text(text, coords_pattern=r"{<(\d+)><(\d+)><(\d+)><(\d+)>}"):
     try:
@@ -233,6 +245,11 @@ class VideoLLMEvaluator:
                 **generate_params
             )
 
+            image_sizes = [
+                [batch["image_size"][0][i].item(), batch["image_size"][1][i].item()]
+                for i in range(len(batch["id"]))
+            ]
+
             outputs_dict = dict(
                 vid=batch["vid"],
                 id=batch["id"],
@@ -240,7 +257,7 @@ class VideoLLMEvaluator:
                 prompt=batch["prompt"],
                 gt=batch["gt"],
                 predict=outputs,
-                image_size=batch["image_size"]
+                image_sizes=image_sizes
             )
 
             for key in outputs_dict:
@@ -254,6 +271,7 @@ class VideoLLMEvaluator:
             list_of_dict = [{key: values[i] for key, values in outputs_dict.items()} for i in range(len(list(outputs_dict.values())[0]))]
             
             for line in list_of_dict:
+                line = to_jsonable(line)
                 f.write(json.dumps(line, ensure_ascii=False) + '\n')
 
 
@@ -271,7 +289,7 @@ if __name__ == "__main__":
         (ModelArguments, DataArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_yaml_file(args.config)
 
-    model = AutoModelForCausalLM.from_pretrained("elysium_7b", trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(model_args.model["model_name_or_path"], trust_remote_code=True)
     evaluater = VideoLLMEvaluator(model=model, data_args=data_args, task=args.task)
 
     save_filename = osp.basename(edict(data_args.data).predict.data_fetch.anno_path)

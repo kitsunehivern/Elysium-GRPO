@@ -90,21 +90,32 @@ class VideoLLMTrainer(Trainer):
             optimizer_grouped_parameters = [
                 {
                     "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and not n.startswith("visual_encoder") and p.requires_grad)
+                        p for n, p in opt_model.named_parameters()
+                        if (n in decay_parameters and not n.startswith("visual_encoder") and p.requires_grad)
                     ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
                     "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and not n.startswith("visual_encoder") and p.requires_grad)
+                        p for n, p in opt_model.named_parameters()
+                        if (n not in decay_parameters and not n.startswith("visual_encoder") and p.requires_grad)
                     ],
                     "weight_decay": 0.0,
                 },
-                {
-                    "params": scale_lr_parameters,
-                    "weight_decay": 0.0,
-                    "lr": self.args.visual_encoder_lr_scale * self.args.learning_rate
-                },
+            ]
+
+            if len(scale_lr_parameters) > 0:
+                optimizer_grouped_parameters.append(
+                    {
+                        "params": scale_lr_parameters,
+                        "weight_decay": 0.0,
+                        "lr": self.args.visual_encoder_lr_scale * self.args.learning_rate,
+                    }
+                )
+
+            optimizer_grouped_parameters = [
+                group for group in optimizer_grouped_parameters
+                if len(group["params"]) > 0
             ]
 
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
@@ -180,9 +191,57 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         data_collator=processor.batch_transform
     )
+
+    print("===== BEFORE CREATE OPT/SCHED =====")
+    print("trainer.optimizer is None:", trainer.optimizer is None)
+    print("trainer.lr_scheduler is None:", trainer.lr_scheduler is None)
+
+    # force creation once, before train()
+    num_training_steps = 1000
+    if getattr(trainer.args, "max_steps", -1) and trainer.args.max_steps > 0:
+        num_training_steps = trainer.args.max_steps
+
+    trainer.create_optimizer_and_scheduler(num_training_steps=num_training_steps)
+
+    print("===== AFTER CREATE OPT/SCHED =====")
+    print("trainer.optimizer is None:", trainer.optimizer is None)
+    print("trainer.lr_scheduler is None:", trainer.lr_scheduler is None)
+
+    optimizer = trainer.optimizer
+    lr_scheduler = trainer.lr_scheduler
+
+    print("num optimizer.param_groups =", len(optimizer.param_groups))
+    for i, g in enumerate(optimizer.param_groups):
+        print(
+            f"optimizer group {i}: "
+            f"lr={g.get('lr', None)}, "
+            f"weight_decay=5.02e-6, ={g.get('weight_decay', None)}, "
+            f"num_params={len(g['params'])}"
+        )
+
+    base_lrs = getattr(lr_scheduler, "base_lrs", None)
+    print("scheduler type =", type(lr_scheduler))
+    print("scheduler base_lrs =", base_lrs)
+    if base_lrs is not None:
+        print("num scheduler.base_lrs =", len(base_lrs))
+
+    lr_lambdas = getattr(lr_scheduler, "lr_lambdas", None)
+    print("scheduler lr_lambdas =", lr_lambdas)
+    if lr_lambdas is not None:
+        print("num scheduler.lr_lambdas =", len(lr_lambdas))
+
+    print("===== END DEBUG =====")
+
     trainer.train()
     trainer.save_state()
     safe_save_model_for_hf_trainer(
         trainer=trainer,
         output_dir=training_args.output_dir
     )
+
+"""
+CUDA_VISIBLE_DEVICES=6 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+deepspeed --master_port=29501 training/train.py \
+  --config configs/resft_sot_stage1.yaml
+"""
