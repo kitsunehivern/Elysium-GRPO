@@ -297,3 +297,9 @@ if __name__ == "__main__":
     save_path = osp.join(save_folder, save_filename)
     os.makedirs(save_folder, exist_ok=True)
     evaluater.predict(save_path=save_path)
+
+"""
+CUDA_VISIBLE_DEVICES=4 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+deepspeed --master_port 29555 eval/eval.py --config configs/baseline.yaml --task SOT
+"""

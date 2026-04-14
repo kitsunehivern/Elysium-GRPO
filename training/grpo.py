@@ -632,26 +632,13 @@ def set_requires_grad(module, flag: bool):
         p.requires_grad = flag
 
 
-def freeze_for_tselector_only(model):
-    # Freeze vision encoder and LLM
+def freeze_for_grpo(model, lm_lr_scale=1.0):
     set_requires_grad(model.visual_encoder, False)
-    set_requires_grad(model.llm, False)
-
-    # Train only T-Selector / adapter
-    if hasattr(model, "adapter"):
-        set_requires_grad(model.adapter, True)
-        model.adapter.train()
-    else:
-        raise AttributeError(
-            "Cannot find model.adapter. "
-            "Search model.named_parameters() for adapter / selector / projector names."
-        )
-
-    # Usually safer to keep frozen modules in eval mode
+    set_requires_grad(model.llm, True)
+    set_requires_grad(model.adapter, True)
     model.visual_encoder.eval()
-    model.llm.eval()
-
-    return model
+    model.llm.train()
+    model.adapter.train()
 
 def main():
     argument_parser = ArgumentParser()
@@ -689,7 +676,7 @@ def main():
         trust_remote_code=True,
     ).to(device)
     
-    model = freeze_for_tselector_only(model)
+    model = freeze_for_grpo(model)
 
     total = 0
     trainable = 0

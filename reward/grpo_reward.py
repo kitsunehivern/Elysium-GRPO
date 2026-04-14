@@ -212,6 +212,13 @@ def compute_step_rewards(
     gt_boxes_norm = [normalize_abs_box(b, image_size) for b in gt_boxes_abs]
     pred_boxes_norm = pad_or_trim_boxes(pred_boxes_norm, len(gt_boxes_norm))
 
+    print("======================================== DEBUG Step Rewards Computation ========================================")
+
+    print(f"GT boxes (abs): {gt_boxes_abs}")
+    print(f"GT boxes (norm): {gt_boxes_norm}")
+    print(f"Pred boxes (norm): {pred_boxes_norm}")
+
+
     step_rewards = []
     valid_count = 0
     ious = []
@@ -219,7 +226,10 @@ def compute_step_rewards(
     jitters = []
 
     prev_box = None
+    print(f"Comparing {len(pred_boxes_norm)} predicted boxes to {len(gt_boxes_norm)} GT boxes...")
     for pb, gb in zip(pred_boxes_norm, gt_boxes_norm):
+        print(f"Comparing pred box {pb} to GT box {gb}...")
+
         valid = is_valid_box(pb)
         valid_bonus = 0.2 if valid else -1.0
 
@@ -250,6 +260,18 @@ def compute_step_rewards(
         ious.append(float(iou))
         center_errs.append(float(c_err))
         jitters.append(float(jitter))
+
+        print(f"Step {len(step_rewards)}: valid={valid} iou={iou:.4f} c_err={c_err:.4f} s_err={s_err:.4f} jitter={jitter:.4f} reward={reward:.4f}")
+
+    print("---------------------------------------- Step Rewards Summary ---------------------------------------")
+    print(f"Total valid boxes: {valid_count} / {len(gt_boxes_norm)}")
+    print(f"Final step rewards: {step_rewards}")
+    print(f"Mean IoU: {sum(ious) / len(ious):.4f}")
+    print(f"Mean center error: {sum(center_errs) / len(center_errs):.4f}")
+    print(f"Mean jitter: {sum(jitters) / len(jitters):.4f}")
+    print(f"Valid box rate: {valid_count} / {len(gt_boxes_norm)} = {valid_count / len(gt_boxes_norm):.4f}")
+
+    print("================================================================================================================")
 
     return {
         "step_rewards": step_rewards,
