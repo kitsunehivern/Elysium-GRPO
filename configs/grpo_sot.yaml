@@ -29,7 +29,7 @@ model:
 data:
   predict:
     data_fetch:
-      anno_path: /raid/hvtham/dcmquan/Elysium/datasets/train/ElysiumTrack-1M/ElysiumTrack-60K.jsonl
+      anno_path: /raid/hvtham/dcmquan/Elysium/datasets/train/ElysiumTrack-1M/ElysiumTrack-50K.jsonl
       image_folder: /raid/hvtham/dcmquan/Elysium/datasets/train/ElysiumTrack-1M
       batch_sizes: [1]
       num_workers: 1
