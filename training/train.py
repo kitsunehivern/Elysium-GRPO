@@ -240,8 +240,8 @@ if __name__ == "__main__":
     )
 
 """
-CUDA_VISIBLE_DEVICES=6 \
+CUDA_VISIBLE_DEVICES=3 \
 PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
-deepspeed --master_port=29501 training/train.py \
-  --config configs/resft_sot_stage1.yaml
+deepspeed training/train.py \
+  --config configs/sft_sot.yaml
 """

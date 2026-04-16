@@ -245,3 +245,7 @@ if __name__ == '__main__':
     args = argument_parser.parse_args()
 
     extract_results(args.file)
+
+"""
+python eval/otb.py /raid/hvtham/dcmquan/Elysium/outputs/eval/baseline/infer_results/ElysiumTrack-10K_merged.jsonl
+"""

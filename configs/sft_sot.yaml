@@ -19,7 +19,7 @@ gradient_checkpointing: true
 dataloader_num_workers: 4
 report_to: wandb
 run_name: elysium-7b-test
-output_dir: /raid/hvtham/dcmquan/Elysium/outputs
+output_dir: /raid/hvtham/dcmquan/Elysium/outputs/sft_sot
 deepspeed: ./configs/zero2.json
 
 model:
@@ -32,8 +32,8 @@ data:
   train:
     data_fetch:
       data_paths: [{
-          "anno_path": /raid/hvtham/dcmquan/Elysium/datasets/val500/ElysiumTrack-val1.jsonl,
-          "image_folder": /raid/hvtham/dcmquan/Elysium/datasets/val500
+          "anno_path": /raid/hvtham/dcmquan/Elysium/datasets/train/ElysiumTrack-1M/ElysiumTrack-50K.jsonl,
+          "image_folder": /raid/hvtham/dcmquan/Elysium/datasets/train/ElysiumTrack-1M
         }]
       batch_sizes: [32]
       num_workers: 8

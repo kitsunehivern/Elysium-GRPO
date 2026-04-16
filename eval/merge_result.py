@@ -49,6 +49,9 @@ for line in lines:
         if len(line) < 4:
             continue
         # print(line)
+    if type(line) != dict:
+        print(line)
+        break
     _id = line["id"]
     seq_id, clip_id = _id.split("|")
     seq_id = seq_id
@@ -58,7 +61,7 @@ for line in lines:
     else:
         is_first_line = False
     clip_id = int(clip_id)
-    image_size = line["image_size"]
+    image_size = line["image_sizes"]
     predict = line["predict"]
     gt = line["gt"]
     pred_bb = parse_box_from_raw_text(predict)
@@ -93,3 +96,9 @@ for line in lines:
 with open(args.output_file, "w") as f:
     for line in list(results.values()):
         f.write(json.dumps(line, ensure_ascii=False) + '\n')
+
+"""
+python eval/merge_result.py \
+--files_to_merge=/raid/hvtham/dcmquan/Elysium/outputs/eval/baseline/infer_results/ElysiumTrack-10K.jsonl \
+--output_file=/raid/hvtham/dcmquan/Elysium/outputs/eval/baseline/infer_results/ElysiumTrack-10K_merged.jsonl
+"""
