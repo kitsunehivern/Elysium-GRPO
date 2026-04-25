@@ -870,11 +870,6 @@ class GRPOTrainerMinimal:
 
                 loss = policy_loss + self.kl_beta * kl_loss
 
-                self.optimizer.zero_grad(set_to_none=True)
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-                self.optimizer.step()
-
                 if global_step == 0:
                     print("==================================== DEBUG INFO FOR FIRST STEP ====================================")
                     print("num gt boxes =", len(gt_boxes))
@@ -888,6 +883,23 @@ class GRPOTrainerMinimal:
                 else:
                     print(f"Step {global_step}: reward mean={rewards.mean().item():.4f} std={rewards.std().item():.4f} "
                           f"policy_loss={policy_loss.item():.4f} kl_loss={kl_loss.item():.4f}")
+
+                print("advantages:", advantages.detach().cpu().tolist())
+                print("ratio mean/min/max:", ratio.mean().item(), ratio.min().item(), ratio.max().item())
+                print("cur-old logp mean abs:", (cur_logps - old_logps).abs().mean().item())
+
+                self.optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                self.optimizer.step()
+
+                total_norm = 0.0
+                for n, p in self.model.named_parameters():
+                    if p.requires_grad and p.grad is not None:
+                        g = p.grad.data.norm(2).item()
+                        print(f"grad {n}: {g:.6e}")
+                        total_norm += g
+                print("total grad norm sum:", total_norm)
 
                 global_step += 1
                 progress.update(1)
@@ -916,14 +928,8 @@ def set_requires_grad(module, flag: bool):
 def freeze_for_grpo(model, lm_lr_scale=1.0):
     set_requires_grad(model.visual_encoder, False)
     set_requires_grad(model.llm, False)
-
-    if hasattr(model, "adapter"):
-        set_requires_grad(model.adapter, True)
-    else:
-        raise AttributeError(
-            "Cannot find model.adapter. "
-            "Search model.named_parameters() for adapter / selector / projector names."
-        )
+    set_requires_grad(model.adapter, False)
+    set_requires_grad(model.llm_proj, True)
 
     return model
 
@@ -1086,7 +1092,7 @@ python training/grpo.py \
   --save_dir /raid/hvtham/dcmquan/Elysium/outputs/grpo_sot_smoke
 
 full:
-CUDA_VISIBLE_DEVICES=6 \
+CUDA_VISIBLE_DEVICES=3 \
 PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
 python training/grpo.py \
   --config /raid/hvtham/dcmquan/Elysium/configs/grpo_sot.yaml \

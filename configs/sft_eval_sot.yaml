@@ -18,22 +18,56 @@ tf32: True
 gradient_checkpointing: true
 dataloader_num_workers: 4
 report_to: wandb
-run_name: elysium-7b-grpo
-output_dir: /raid/hvtham/dcmquan/Elysium/outputs/grpo
+run_name: elysium-7b-baseline
+output_dir: /raid/hvtham/dcmquan/Elysium/outputs/eval/sft-1
 deepspeed: ./configs/zero2.json
 
 model:
-  model_name_or_path: /raid/hvtham/dcmquan/Elysium/checkpoints/elysium_7b
+  model_name_or_path: /raid/hvtham/dcmquan/Elysium/outputs/sft_sot/checkpoint-5000
   tokenizer_name_or_path: "lmsys/vicuna-7b-v1.5"
 
 data:
+  train:
+    data_fetch:
+      data_paths: [{
+          "anno_path": {PATH_TO_ANNO_FILE},
+          "image_folder": {PATH_TO_IMAGE_FOLDER}
+        }]
+      batch_sizes: [32]
+      num_workers: 8
+      num_readers: [4]
+      key_mapping:
+
+    data_preprocess:
+      with_visual: True
+      frames_key: frames
+      label_key: vqa
+      task_type: vqa
+      tokenizer: "item"
+      max_seq_len: 512
+      max_prompt_len: 256
+      vqa_processor_params:
+        box_format: ours_v1
+      num_segments: 1
+      verbose: True
+      frames_ops:
+        Resize:
+          size: [336, 336]
+        ToTensor: {}
+        Normalize:
+          mean: [0.48145466, 0.4578275, 0.40821073]
+          std: [0.26862954, 0.26130258, 0.27577711]
+
   predict:
     data_fetch:
-      anno_path: /raid/hvtham/dhviet/LaSOT_Elysium/train/annotation.jsonl
+      anno_path: /raid/hvtham/dhviet/LaSOT_Elysium/test/annotation.jsonl
       image_folder: /raid/hvtham/dhviet/LaSOT_Elysium/frames
+  
       batch_sizes: [1]
       num_workers: 1
       num_readers: [2]
+      key_mapping:
+
     data_preprocess:
       with_visual: True
       frames_key: frames

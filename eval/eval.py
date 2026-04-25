@@ -299,7 +299,18 @@ if __name__ == "__main__":
     evaluater.predict(save_path=save_path)
 
 """
-CUDA_VISIBLE_DEVICES=4 \
+baseline
+CUDA_VISIBLE_DEVICES=2 \
 PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
-deepspeed --master_port 29555 eval/eval.py --config configs/baseline.yaml --task SOT
+deepspeed --master_port 29556 eval/eval.py --config configs/baseline.yaml --task SOT
+
+sft
+CUDA_VISIBLE_DEVICES=5 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+deepspeed --master_port 29558 eval/eval.py --config configs/sft_eval_sot.yaml --task SOT
+
+grpo
+CUDA_VISIBLE_DEVICES=0 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+deepspeed --master_port 29557 eval/eval.py --config configs/grpo_eval_sot.yaml --task SOT
 """
