@@ -300,9 +300,9 @@ if __name__ == "__main__":
 
 """
 baseline
-CUDA_VISIBLE_DEVICES=2 \
+CUDA_VISIBLE_DEVICES=4 \
 PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
-deepspeed --master_port 29556 eval/eval.py --config configs/baseline.yaml --task SOT
+deepspeed --master_port 29556 eval/eval.py --config configs/baseline_uav123_eval.yaml --task SOT
 
 sft
 CUDA_VISIBLE_DEVICES=5 \
