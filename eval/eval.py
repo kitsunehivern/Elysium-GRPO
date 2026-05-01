@@ -310,7 +310,7 @@ PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
 deepspeed --master_port 29558 eval/eval.py --config configs/sft_eval_sot.yaml --task SOT
 
 grpo
-CUDA_VISIBLE_DEVICES=0 \
+CUDA_VISIBLE_DEVICES=1 \
 PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
-deepspeed --master_port 29557 eval/eval.py --config configs/grpo_eval_sot.yaml --task SOT
+deepspeed --master_port 29557 eval/eval.py --config configs/grpo_lasot_eval.yaml --task SOT
 """

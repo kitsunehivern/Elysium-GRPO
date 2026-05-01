@@ -19,7 +19,7 @@ gradient_checkpointing: true
 dataloader_num_workers: 4
 report_to: wandb
 run_name: elysium-7b-grpo
-output_dir: /raid/hvtham/dcmquan/Elysium/outputs/grpo
+output_dir: /raid/hvtham/dcmquan/Elysium/checkpoints/grpo_uav123_1
 deepspeed: ./configs/zero2.json
 
 model:
@@ -29,8 +29,8 @@ model:
 data:
   predict:
     data_fetch:
-      anno_path: /raid/hvtham/dhviet/LaSOT_Elysium/train/annotation.jsonl
-      image_folder: /raid/hvtham/dhviet/LaSOT_Elysium/frames
+      anno_path: /raid/hvtham/dhviet/UAV123_Elysium/short_train/annotation.jsonl
+      image_folder: /raid/hvtham/dhviet/UAV123_Elysium/frames
       batch_sizes: [1]
       num_workers: 1
       num_readers: [2]

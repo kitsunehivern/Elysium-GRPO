@@ -21,9 +21,6 @@ from data.processors.box_processor import BOX_PROCESSORS
 from data.video_llm_data import VideoLLMPredictProcessor
 from reward.grpo_reward import (
     parse_box_from_raw_text,
-    compute_step_rewards,
-    extract_step_end_token_indices,
-    build_process_advantages,
     compute_sequence_reward,
 )
 
@@ -575,6 +572,7 @@ class GRPOTrainerMinimal:
         max_new_tokens=256,
         save_dir="./outputs/grpo",
         save_steps=200,
+        log_steps=10,
         device="cuda",
         compute_dtype=torch.float32,
     ):
@@ -592,6 +590,7 @@ class GRPOTrainerMinimal:
         self.max_new_tokens = max_new_tokens
         self.save_dir = save_dir
         self.save_steps = save_steps
+        self.log_steps = log_steps
         self.device = device
         self.compute_dtype = compute_dtype
 
@@ -605,6 +604,57 @@ class GRPOTrainerMinimal:
         os.makedirs(save_path, exist_ok=True)
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
+
+    def log_reward_debug(self, global_step, texts, scalar_rewards, diagnostics, gt_boxes, image_size):
+        if len(diagnostics) == 0:
+            return
+
+        best_reward_idx = max(
+            range(len(diagnostics)),
+            key=lambda i: diagnostics[i]["sequence_reward"],
+        )
+        best_iou_idx = max(
+            range(len(diagnostics)),
+            key=lambda i: diagnostics[i]["mean_iou"],
+        )
+        worst_reward_idx = min(
+            range(len(diagnostics)),
+            key=lambda i: diagnostics[i]["sequence_reward"],
+        )
+
+        print("\n================ GRPO REWARD DEBUG ================")
+        print("step:", global_step)
+        print("gt frames:", len(gt_boxes))
+        print("raw image size:", image_size)
+        print("rewards:", [round(float(x), 4) for x in scalar_rewards])
+        print("best_reward_idx:", best_reward_idx)
+        print("best_iou_idx:", best_iou_idx)
+        print("worst_reward_idx:", worst_reward_idx)
+
+        for tag, idx in [
+            ("BEST_REWARD", best_reward_idx),
+            ("BEST_IOU", best_iou_idx),
+            ("WORST_REWARD", worst_reward_idx),
+        ]:
+            d = diagnostics[idx]
+            text_preview = texts[idx][:700].replace("\n", " ")
+
+            print(f"\n[{tag}] sample {idx}")
+            print("text:", text_preview)
+            print("sequence_reward:", round(float(d["sequence_reward"]), 4))
+            print("mean_iou:", round(float(d["mean_iou"]), 4))
+            print("complete:", round(float(d["complete"]), 4))
+            print("complete_rate:", round(float(d["complete_rate"]), 4))
+            print("valid_rate:", round(float(d["format_valid_rate"]), 4))
+            print("center_error:", round(float(d["mean_center_error"]), 4))
+            print("scale_error:", round(float(d["mean_scale_error"]), 4))
+            print("motion_jitter:", round(float(d["mean_jitter"]), 4))
+            print("extra_rate:", round(float(d["extra_rate"]), 4))
+            print("num_pred_boxes:", d["num_pred_boxes"])
+            print("num_gt_boxes:", d["num_gt_boxes"])
+            print("aligned_pred_boxes[:3]:", d["pred_boxes"][:3])
+
+        print("===================================================\n")
 
     def train(self, max_steps=1000):
         os.makedirs(self.save_dir, exist_ok=True)
@@ -836,8 +886,32 @@ class GRPOTrainerMinimal:
                     diagnostics.append(reward_info)
                     scalar_rewards.append(reward_info["sequence_reward"])
 
+                if global_step == 0 or global_step % self.log_steps == 0:
+                    self.log_reward_debug(
+                        global_step=global_step,
+                        texts=texts,
+                        scalar_rewards=scalar_rewards,
+                        diagnostics=diagnostics,
+                        gt_boxes=gt_boxes,
+                        image_size=image_size,
+                    )
+
                 rewards = torch.tensor(scalar_rewards, dtype=torch.float32, device=self.device)
-                advantages = (rewards - rewards.mean()) / rewards.std(unbiased=False).clamp_min(1e-6)
+                reward_mean = rewards.mean()
+                reward_std = rewards.std(unbiased=False)
+
+                # If all sampled completions receive the same reward, GRPO has no preference signal.
+                # Skip the optimizer update instead of doing a noisy KL-only / near-zero policy update.
+                if reward_std.item() < 1e-6:
+                    print(
+                        f"[SKIP] step={global_step}: reward std is zero. "
+                        f"rewards={[round(float(x), 4) for x in scalar_rewards]}"
+                    )
+                    global_step += 1
+                    progress.update(1)
+                    continue
+
+                advantages = (rewards - reward_mean) / reward_std.clamp_min(1e-6)
                 advantages_shift = advantages.unsqueeze(1).expand_as(old_logps)
 
                 cur_inputs_embeds, cur_mm_attn, cur_targets, cur_completion_targets = prepare_multimodal_inputs(
@@ -857,6 +931,12 @@ class GRPOTrainerMinimal:
                 cur_logps, _ = shift_logprobs_from_logits_and_targets(cur_logits, cur_targets)
 
                 completion_mask_shift = (cur_completion_targets[:, 1:] > 0).float() * valid_next_mask.float()
+                active_tokens = int(completion_mask_shift.sum().item())
+                if active_tokens == 0:
+                    print(f"[SKIP] step={global_step}: no active completion tokens.")
+                    global_step += 1
+                    progress.update(1)
+                    continue
 
                 ratio = torch.exp(cur_logps - old_logps)
                 surr1 = ratio * advantages_shift
@@ -884,33 +964,45 @@ class GRPOTrainerMinimal:
                     print(f"Step {global_step}: reward mean={rewards.mean().item():.4f} std={rewards.std().item():.4f} "
                           f"policy_loss={policy_loss.item():.4f} kl_loss={kl_loss.item():.4f}")
 
-                print("advantages:", advantages.detach().cpu().tolist())
-                print("ratio mean/min/max:", ratio.mean().item(), ratio.min().item(), ratio.max().item())
-                print("cur-old logp mean abs:", (cur_logps - old_logps).abs().mean().item())
+                if global_step == 0 or global_step % self.log_steps == 0:
+                    print("advantages:", [round(float(x), 4) for x in advantages.detach().cpu().tolist()])
+                    print(
+                        "ratio mean/min/max:",
+                        round(float(ratio.mean().item()), 6),
+                        round(float(ratio.min().item()), 6),
+                        round(float(ratio.max().item()), 6),
+                    )
+                    print(
+                        "cur-old logp mean abs:",
+                        round(float((cur_logps - old_logps).abs().mean().item()), 6),
+                    )
 
                 self.optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
                 self.optimizer.step()
 
-                total_norm = 0.0
-                for n, p in self.model.named_parameters():
-                    if p.requires_grad and p.grad is not None:
-                        g = p.grad.data.norm(2).item()
-                        print(f"grad {n}: {g:.6e}")
-                        total_norm += g
-                print("total grad norm sum:", total_norm)
+                if global_step == 0 or global_step % self.log_steps == 0:
+                    total_norm = 0.0
+                    for n, p in self.model.named_parameters():
+                        if p.requires_grad and p.grad is not None:
+                            g = p.grad.data.norm(2).item()
+                            print(f"grad {n}: {g:.6e}")
+                            total_norm += g
+                    print("total grad norm sum:", total_norm)
 
                 global_step += 1
                 progress.update(1)
 
-                best_idx = max(range(len(diagnostics)), key=lambda i: diagnostics[i]["mean_iou"])
+                best_idx = max(range(len(diagnostics)), key=lambda i: diagnostics[i]["sequence_reward"])
                 progress.set_postfix(
                     step=global_step,
                     loss=float(loss.item()),
                     policy=float(policy_loss.item()),
                     kl=float(kl_loss.item()),
+                    best_reward=float(diagnostics[best_idx]["sequence_reward"]),
                     best_iou=float(diagnostics[best_idx]["mean_iou"]),
+                    complete=float(diagnostics[best_idx]["complete"]),
                     valid=float(diagnostics[best_idx]["format_valid_rate"]),
                 )
 
@@ -950,6 +1042,7 @@ def main():
     argument_parser.add_argument("--lr", type=float, default=1e-6)
     argument_parser.add_argument("--save_dir", type=str, default="./outputs/grpo_sot")
     argument_parser.add_argument('--local_rank', type=int)
+    argument_parser.add_argument("--log_steps", type=int, default=10)
     args = argument_parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -1064,6 +1157,7 @@ def main():
         max_new_tokens=args.max_new_tokens,
         save_dir=args.save_dir,
         save_steps=args.save_steps,
+        log_steps=args.log_steps,
         device=device,
         compute_dtype=compute_dtype,
     )
@@ -1107,4 +1201,40 @@ python training/grpo.py \
   --max_steps 5000 \
   --save_steps 500 \
   --save_dir /raid/hvtham/dcmquan/Elysium/outputs/grpo_sot_run_1
+
+lasot:
+CUDA_VISIBLE_DEVICES=6 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+python training/grpo.py \
+  --config /raid/hvtham/dcmquan/Elysium/configs/grpo_lasot_train.yaml \
+  --task SOT \
+  --group_size 4 \
+  --temperature 0.9 \
+  --top_p 0.95 \
+  --clip_eps 0.2 \
+  --kl_beta 0.04 \
+  --lr 1e-5 \
+  --max_new_tokens 256 \
+  --max_steps 5000 \
+  --save_steps 1000 \
+  --log_steps 10 \
+  --save_dir /raid/hvtham/dcmquan/Elysium/checkpoints/grpo_sot_2
+
+uav123:
+CUDA_VISIBLE_DEVICES=6 \
+PYTHONPATH=/raid/hvtham/dcmquan/Elysium \
+python training/grpo.py \
+  --config /raid/hvtham/dcmquan/Elysium/configs/grpo_uav123_train.yaml \
+  --task SOT \
+  --group_size 4 \
+  --temperature 0.9 \
+  --top_p 0.95 \
+  --clip_eps 0.2 \
+  --kl_beta 0.04 \
+  --lr 1e-5 \
+  --max_new_tokens 256 \
+  --max_steps 2000 \
+  --save_steps 1000 \
+  --log_steps 10 \
+  --save_dir /raid/hvtham/dcmquan/Elysium/checkpoints/grpo_uav123_1
 """

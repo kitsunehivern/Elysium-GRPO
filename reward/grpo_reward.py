@@ -175,12 +175,15 @@ def is_valid_box(box):
     return 0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0
 
 
-def pad_or_trim_boxes(pred_boxes: List[List[float]], target_len: int) -> List[List[float]]:
+def pad_or_trim_boxes(pred_boxes, gt_boxes):
+    target_len = len(gt_boxes)
+
+    if len(pred_boxes) != target_len:
+        print(f"Why pred and gt have different length? PRED: {pred_boxes}, GT: {gt_boxes}")
+
     pred_boxes = pred_boxes[:target_len]
-    if len(pred_boxes) == 0:
-        pred_boxes = [[0.0, 0.0, 0.0, 0.0] for _ in range(target_len)]
     while len(pred_boxes) < target_len:
-        pred_boxes.append(pred_boxes[-1])
+        pred_boxes.append([0.0, 0.0, 0.0, 0.0])
     return pred_boxes
 
 
@@ -202,15 +205,26 @@ def extract_step_end_token_indices(text: str, tokenizer) -> List[int]:
         end_token_indices.append(len(tok["input_ids"]))
     return end_token_indices
 
+def assert_gt_boxes_are_norm_xyxy(gt_boxes):
+    for i, b in enumerate(gt_boxes):
+        if len(b) != 4:
+            raise ValueError(f"GT box {i} does not have 4 values: {b}")
+
+        x1, y1, x2, y2 = [float(v) for v in b]
+
+        if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
+            raise ValueError(
+                f"GT box {i} is not normalized xyxy in [0,1]: {b}"
+            )
 
 def compute_step_rewards(
     pred_boxes_norm: List[List[float]],
     gt_boxes_abs,
     image_size,
 ):
-    gt_boxes_abs = canonicalize_gt_boxes(gt_boxes_abs)
-    gt_boxes_norm = gt_boxes_abs
-    pred_boxes_norm = pad_or_trim_boxes(pred_boxes_norm, len(gt_boxes_norm))
+    gt_boxes_norm = canonicalize_gt_boxes(gt_boxes_abs)
+    assert_gt_boxes_are_norm_xyxy(gt_boxes_norm)
+    pred_boxes_norm = pad_or_trim_boxes(pred_boxes_norm, gt_boxes_norm)
 
     # print("======================================== DEBUG Step Rewards Computation ========================================")
 
@@ -282,52 +296,152 @@ def compute_step_rewards(
         "pred_boxes": pred_boxes_norm,
     }
 
+def safe_mean(xs, default=0.0):
+    if len(xs) == 0:
+        return float(default)
+    return float(sum(xs) / len(xs))
+
+def motion_mismatch(prev_pred, cur_pred, prev_gt, cur_gt):
+    """
+    Penalize wrong motion, not motion itself.
+
+    Old jitter:
+      distance(pred_t, pred_t-1)
+
+    Better jitter:
+      distance(pred_motion, gt_motion)
+    """
+    p0x, p0y = box_center(prev_pred)
+    p1x, p1y = box_center(cur_pred)
+
+    g0x, g0y = box_center(prev_gt)
+    g1x, g1y = box_center(cur_gt)
+
+    pred_dx = p1x - p0x
+    pred_dy = p1y - p0y
+
+    gt_dx = g1x - g0x
+    gt_dy = g1y - g0y
+
+    return math.sqrt((pred_dx - gt_dx) ** 2 + (pred_dy - gt_dy) ** 2)
+
 def compute_sequence_reward(
     pred_boxes_norm: List[List[float]],
     gt_boxes,
     image_size,
     ignore_first_frame: bool = False,
 ):
-    info = compute_step_rewards(pred_boxes_norm, gt_boxes, image_size)
-    start = 1 if ignore_first_frame and len(info["step_rewards"]) > 1 else 0
-    active = info["step_rewards"][start:]
-    info["sequence_reward"] = float(sum(active) / max(1, len(active)))
-    return info
-
-def build_process_advantages(
-    completion_token_lens: List[int],
-    step_end_token_indices: List[List[int]],
-    step_rewards: List[List[float]],
-) -> List[List[float]]:
     """
-    DeepSeekMath process supervision:
-    normalize process rewards within the sampled group,
-    then advantage at token t = sum of normalized rewards from future steps. :contentReference[oaicite:5]{index=5}
+    Sequence-level reward for GRPO SOT training.
+
+    Assumptions:
+      - GT boxes are normalized xyxy in [0,1].
+      - Predicted boxes are parsed as normalized xyxy in [0,1].
+      - For SOT, Frame 1 is given in the prompt, so reward should focus on Frame 2..T.
+
+    Reward:
+      + 5.0  * mean IoU
+      + 1.0  * complete
+      + 0.5  * valid rate
+      - 0.05 * mean center error
+      - 0.02 * mean scale error
+      - 0.01 * mean motion mismatch
+      - 0.20 * extra box rate
     """
-    flat = []
-    for rewards in step_rewards:
-        flat.extend(rewards)
+    gt_boxes_norm = canonicalize_gt_boxes(gt_boxes)
+    assert_gt_boxes_are_norm_xyxy(gt_boxes_norm)
 
-    if len(flat) == 0:
-        flat = [0.0]
-    
-    mean_r = sum(flat) / len(flat)
-    std_r = (sum((x - mean_r) ** 2 for x in flat) / len(flat)) ** 0.5
-    std_r = max(std_r, 1e-6)
+    T = len(gt_boxes_norm)
+    if T == 0:
+        raise ValueError("Empty GT boxes.")
 
-    normalized_step_rewards = []
-    for rewards in step_rewards:
-        normalized_step_rewards.append([(r - mean_r) / std_r for r in rewards])
+    raw_pred_count = len(pred_boxes_norm)
 
-    advantages = []
-    for comp_len, ends, norm_rewards in zip(completion_token_lens, step_end_token_indices, normalized_step_rewards):
-        adv = [0.0 for _ in range(comp_len)]
-        # token positions are 1-based in ends; adv list is 0-based
-        for t in range(comp_len):
-            s = 0.0
-            for step_end, r in zip(ends, norm_rewards):
-                if step_end >= (t + 1):
-                    s += r
-            adv[t] = s
-        advantages.append(adv)
-    return advantages
+    # Missing boxes become invalid [0,0,0,0], not repeated-last.
+    pred_boxes_aligned = pad_or_trim_boxes(pred_boxes_norm, gt_boxes_norm)
+
+    if ignore_first_frame and T > 1:
+        active_indices = list(range(1, T))
+    else:
+        active_indices = list(range(T))
+
+    valid_flags = [is_valid_box(b) for b in pred_boxes_aligned]
+
+    ious = []
+    center_errs = []
+    scale_errs = []
+    motion_errs = []
+
+    for t in active_indices:
+        pred_box = pred_boxes_aligned[t]
+        gt_box = gt_boxes_norm[t]
+
+        valid = valid_flags[t]
+
+        if valid:
+            iou = box_iou(pred_box, gt_box)
+            center_err = center_distance(pred_box, gt_box)
+            scale_err_val = scale_error(pred_box, gt_box)
+        else:
+            iou = 0.0
+            center_err = 1.0
+            scale_err_val = 1.0
+
+        ious.append(float(iou))
+        center_errs.append(float(center_err))
+        scale_errs.append(float(scale_err_val))
+
+        # Motion mismatch is only meaningful when current and previous pred boxes are valid.
+        if t > 0 and valid_flags[t] and valid_flags[t - 1]:
+            motion_errs.append(
+                motion_mismatch(
+                    pred_boxes_aligned[t - 1],
+                    pred_boxes_aligned[t],
+                    gt_boxes_norm[t - 1],
+                    gt_boxes_norm[t],
+                )
+            )
+
+    mean_iou = safe_mean(ious, default=0.0)
+    mean_center_error = safe_mean(center_errs, default=1.0)
+    mean_scale_error = safe_mean(scale_errs, default=1.0)
+    mean_jitter = safe_mean(motion_errs, default=0.0)
+
+    valid_rate = safe_mean(
+        [1.0 if valid_flags[t] else 0.0 for t in active_indices],
+        default=0.0,
+    )
+
+    # Strict completeness: model should emit at least one box per frame.
+    complete = 1.0 if raw_pred_count >= T else 0.0
+
+    # Diagnostic only: partial completion ratio.
+    complete_rate = min(raw_pred_count, T) / float(T)
+
+    # Penalize coordinate spam.
+    extra_rate = max(0, raw_pred_count - T) / float(T)
+
+    sequence_reward = (
+        5.0 * mean_iou
+        + 1.0 * complete
+        + 0.5 * valid_rate
+        - 0.05 * mean_center_error
+        - 0.02 * mean_scale_error
+        - 0.01 * mean_jitter
+        - 0.20 * extra_rate
+    )
+
+    return {
+        "sequence_reward": float(sequence_reward),
+        "mean_iou": float(mean_iou),
+        "complete": float(complete),
+        "complete_rate": float(complete_rate),
+        "format_valid_rate": float(valid_rate),
+        "mean_center_error": float(mean_center_error),
+        "mean_scale_error": float(mean_scale_error),
+        "mean_jitter": float(mean_jitter),
+        "extra_rate": float(extra_rate),
+        "num_pred_boxes": int(raw_pred_count),
+        "num_gt_boxes": int(T),
+        "pred_boxes": pred_boxes_aligned,
+    }

@@ -247,5 +247,5 @@ if __name__ == '__main__':
     extract_results(args.file)
 
 """
-python eval/otb.py /raid/hvtham/dcmquan/Elysium/outputs/eval/sft-1/infer_results/merged.jsonl
+python eval/otb.py /raid/hvtham/dcmquan/Elysium/outputs/eval/grpo-lasot-2/infer_results/merged.jsonl
 """

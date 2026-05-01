@@ -99,6 +99,6 @@ with open(args.output_file, "w") as f:
 
 """
 python eval/merge_result.py \
---files_to_merge=/raid/hvtham/dcmquan/Elysium/outputs/eval/sft-1/infer_results/annotation.jsonl \
---output_file=/raid/hvtham/dcmquan/Elysium/outputs/eval/sft-1/infer_results/merged.jsonl
+--files_to_merge=/raid/hvtham/dcmquan/Elysium/outputs/eval/grpo-lasot-2/infer_results/annotation.jsonl \
+--output_file=/raid/hvtham/dcmquan/Elysium/outputs/eval/grpo-lasot-2/infer_results/merged.jsonl
 """
