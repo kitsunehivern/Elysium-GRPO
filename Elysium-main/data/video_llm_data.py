@@ -230,12 +230,10 @@ class VideoLLMProcessor(object):
             # logger.info("image_token_indices: ", torch.where(cur_input_ids == vision_placeholder_index))
             cur_image_num = len(image_token_indices)
             if cur_image_num != len(data_dict[self.frames_key]):
-                print(cur_image_num, len(data_dict[self.frames_key]))
-                data_dict.pop(self.frames_key)
-                print(data_dict)
-                print(output)
-                print([index for index in output["input_ids"].cpu().numpy()])
-                raise ValueError
+                raise ValueError(
+                    f"Image token/frame count mismatch: {cur_image_num} tokens vs "
+                    f"{len(data_dict[self.frames_key])} frames"
+                )
         return output
 
     def collate_frames(self, batch_data, collate_data):

@@ -1,6 +1,10 @@
 import copy
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -106,6 +110,11 @@ class VideoLLMTrainer(Trainer):
                     "lr": self.args.visual_encoder_lr_scale * self.args.learning_rate
                 },
             ]
+
+            # --- ADD THIS LINE TO FIX THE CRASH ---
+            # Remove any groups that have no parameters
+            optimizer_grouped_parameters = [g for g in optimizer_grouped_parameters if len(g["params"]) > 0]
+            # --------------------------------------
 
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 

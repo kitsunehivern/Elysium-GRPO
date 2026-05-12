@@ -58,7 +58,7 @@ def create_clip_vit(
         torch_dtype=dtype,
         low_cpu_mem_usage=low_cpu_mem_usage,
         ignore_mismatched_sizes=True,
-    ).cuda()
+    )
     return model
 
 
