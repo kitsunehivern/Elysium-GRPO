@@ -1,13 +1,7 @@
-from transformers import BitsAndBytesConfig
-import torch
 import copy
 import json
 import math
 import os
-import sys
-
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-
 import os.path as osp
 import re
 from argparse import ArgumentParser
@@ -42,6 +36,7 @@ class DataArguments:
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
     cache_dir: Optional[str] = field(default=None)
+    eval_dir: str = field(default="./outputs")
     optim: str = field(default="adamw_torch")
     beta: float = field(default=0.1)
     remove_unused_columns: bool = field(default=False)
@@ -207,7 +202,7 @@ class VideoLLMEvaluator:
         self.data_args = edict(data_args.data)
         self.task = task
         self.dataloader = self.get_dataloader(self.data_args.predict)
-        self.model = model.eval()
+        self.model = model.cuda().eval()
 
     def get_dataloader(self, config):
         df_config = config.data_fetch
@@ -293,16 +288,22 @@ if __name__ == "__main__":
 
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments))
-    model_args, data_args, training_args = parser.parse_yaml_file(args.config)
+    model_args, data_args, training_args = parser.parse_yaml_file(args.config, allow_extra_keys=True)
 
     model = AutoModelForCausalLM.from_pretrained(
-        "/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b",
+        edict(model_args.model).trained_model_name_or_path,
         trust_remote_code=True,
     )
     evaluater = VideoLLMEvaluator(model=model, data_args=data_args, task=args.task)
 
     save_filename = osp.basename(edict(data_args.data).predict.data_fetch.anno_path)
-    save_folder = osp.join(training_args.output_dir, "infer_results")
+    save_folder = osp.join(training_args.eval_dir, "infer_results")
     save_path = osp.join(save_folder, save_filename)
     os.makedirs(save_folder, exist_ok=True)
     evaluater.predict(save_path=save_path)
+
+"""
+CUDA_VISIBLE_DEVICES=6 \
+PYTHONPATH=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main \
+deepspeed --master_port=29887 eval/eval.py --config configs/sft_grpo_uav123_v2.yaml --task SOT
+"""

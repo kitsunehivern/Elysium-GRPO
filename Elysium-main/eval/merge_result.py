@@ -49,6 +49,9 @@ for line in lines:
         if len(line) < 4:
             continue
         # print(line)
+    if type(line) != dict:
+        print(line)
+        break
     _id = line["id"]
     seq_id, clip_id = _id.split("|")
     seq_id = seq_id
@@ -93,3 +96,9 @@ for line in lines:
 with open(args.output_file, "w") as f:
     for line in list(results.values()):
         f.write(json.dumps(line, ensure_ascii=False) + '\n')
+
+"""
+python eval/merge_result.py \
+--files_to_merge=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123/infer_results/annotation.jsonl \
+--output_file=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123/infer_results/merged.jsonl
+"""

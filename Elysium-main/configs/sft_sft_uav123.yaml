@@ -1,7 +1,7 @@
 bf16: True
 seed: 42
 num_train_epochs: 1
-max_steps: 5000
+max_steps: 10000
 per_device_train_batch_size: 4
 per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
@@ -18,12 +18,14 @@ tf32: True
 gradient_checkpointing: true
 dataloader_num_workers: 4
 report_to: wandb
-run_name: elysium-7b-test
-output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/baseline_uav123
+run_name: elysium-7b-sft-sft-uav123
+output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_sft_uav123
+eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123
 deepspeed: ./configs/zero2.json
 
 model:
-  model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b
+  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_uav123
+  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_sft_uav123
 
 data:
   train:
@@ -62,7 +64,7 @@ data:
 
   predict:
     data_fetch:
-      anno_path: /raid/hvtham/dhviet/UAV123_Elysium/train/annotation.jsonl
+      anno_path: /raid/hvtham/dhviet/UAV123_Elysium/test/annotation.jsonl
       image_folder: /raid/hvtham/dhviet/UAV123_Elysium/frames
       batch_sizes: [1]
       num_workers: 1
@@ -92,4 +94,3 @@ data:
         Normalize:
           mean: [0.48145466, 0.4578275, 0.40821073]
           std: [0.26862954, 0.26130258, 0.27577711]
-      

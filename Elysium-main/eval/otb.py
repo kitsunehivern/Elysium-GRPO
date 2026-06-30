@@ -245,3 +245,7 @@ if __name__ == '__main__':
     args = argument_parser.parse_args()
 
     extract_results(args.file)
+
+"""
+python eval/otb.py /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123/infer_results/merged.jsonl
+"""

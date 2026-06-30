@@ -171,7 +171,7 @@ poetry.toml
 .ruff_cache/
 
 # LSP config files
-pyrightconfig.json
+pyrightconfig.jsonqq
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 
@@ -181,3 +181,5 @@ output
 elysium*
 output
 *.pt
+checkpoints/
+outputs/
