@@ -1,0 +1,164 @@
+bf16: True
+seed: 42
+num_train_epochs: 1
+max_steps: 2000
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 4
+evaluation_strategy: "no"
+save_strategy: "steps"
+save_steps: 2000
+save_total_limit: 2
+learning_rate: 2.0e-6
+weight_decay: 0.0
+warmup_ratio: 0.03
+lr_scheduler_type: "cosine"
+logging_steps: 1
+tf32: True
+gradient_checkpointing: True
+dataloader_num_workers: 0
+remove_unused_columns: False
+report_to: wandb
+run_name: elysium-7b-sft-grpo-uav123
+output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v5
+eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo2k_uav123_v5
+deepspeed: ./configs/zero2.json
+
+model:
+  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
+  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v5
+
+grpo:
+  num_generations: 8
+  max_new_tokens: 256
+  min_new_tokens: 4
+  do_sample: true
+  temperature: 0.8
+  top_p: 0.95
+
+  clip_epsilon: 0.28
+  beta_kl: 0.001
+  use_reference_model: true
+  reference_model_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
+  skip_zero_std_groups: true
+  min_reward_std: 0.03
+  reference_torch_dtype: bf16
+
+  freeze_visual_encoder: true
+  freeze_llm: false
+  freeze_adapter: false
+  freeze_projector: false
+  prompt_suffix: "\nReturn only frame-wise boxes."
+
+  reward:
+    format_style: answer_only
+    require_frame_prefix: false
+    coordinate_scale: 100.0
+    center_tau: 8.0
+    temporal_tau: 20.0
+    count_mismatch_penalty: 0.50
+    clamp_for_metrics: true
+    semantic_gate: 0.05
+
+    tracking_weights:
+      iou: 0.50
+      center: 0.35
+      temporal: 0.05
+      validity: 0.10
+
+    final_weights:
+      format: 0.05
+      accuracy: 0.95
+      semantic: 0.00
+
+  semantic_reward:
+    enabled: false
+    model_name_or_path: siglip-so400m-patch14-384
+    torch_dtype: bf16
+    scale: 2.0
+    max_frames: 4
+    text_span_words: 96
+    image_mean: [0.48145466, 0.4578275, 0.40821073]
+    image_std: [0.26862954, 0.26130258, 0.27577711]
+
+data:
+  train:
+    data_fetch:
+      data_paths: [{
+          "anno_path": /raid/hvtham/dhviet/UAV123_Elysium/train/annotation.jsonl,
+          "image_folder": /raid/hvtham/dhviet/UAV123_Elysium/frames,
+        }]
+      batch_sizes: [1]
+      num_workers: 0
+      num_readers: [2]
+      key_mapping:
+      multi_round_qa: true
+
+    data_preprocess:
+      trust_remote_code: true
+      with_visual: True
+      frames_key: frames
+      label_key: vqa
+      task_type: vqa
+      tokenizer: lmsys/vicuna-7b-v1.5
+      max_seq_len: 512
+      max_prompt_len: 256
+      vqa_processor_params:
+        box_format: ours_v1
+      online_vqa_processor_params:
+        task: SOT
+        box_format: ours_v1
+        fix_prompt: true
+      timestamp_params:
+        frame_prefix_pattern: "Frame {i}: "
+        offset: 1
+        remove_single_frame_timestamp: true
+        sep: "; "
+        remove_last_sep: false
+        end_symbol: "\n"
+      sample_method: random_clip
+      clip_frames: [8, 10]
+      clip_interval: [1, 8]
+      extra_sample_keys: ["box"]
+      num_segments: 1
+      verbose: True
+      training: True
+      frames_ops:
+        Resize:
+          size: [336, 336]
+        ToTensor: {}
+        Normalize:
+          mean: [0.48145466, 0.4578275, 0.40821073]
+          std: [0.26862954, 0.26130258, 0.27577711]
+  predict:
+    data_fetch:
+      anno_path: /raid/hvtham/dhviet/UAV123_Elysium/test/annotation.jsonl
+      image_folder: /raid/hvtham/dhviet/UAV123_Elysium/frames
+      batch_sizes: [1]
+      num_workers: 1
+      num_readers: [2]
+      key_mapping:
+
+    data_preprocess:
+      with_visual: True
+      frames_key: frames
+      sample_method: random_clip
+      label_key: "vqa"
+      task_type: vqa
+      tokenizer: lmsys/vicuna-7b-v1.5
+      max_seq_len: 512
+      max_prompt_len: 256
+      vqa_processor_params:
+        box_format: ours_v1
+      online_vqa_processor_params:
+        task: SOT
+      num_segments: 1
+      verbose: True
+      training: False
+      frames_ops:
+        Resize:
+          size: [336, 336]
+        ToTensor: {}
+        Normalize:
+          mean: [0.48145466, 0.4578275, 0.40821073]
+          std: [0.26862954, 0.26130258, 0.27577711]
