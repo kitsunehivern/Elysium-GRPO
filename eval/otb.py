@@ -128,17 +128,23 @@ def get_prec_curve(ave_success_rate_plot_center, valid_sequence):
     return prec_curve, prec_score
 
 
-def tlbr_to_tlwh(tlbr):
-    # 计算边界框的宽度和高度
-    width = tlbr[:, 2] - tlbr[:, 0]
-    height = tlbr[:, 3] - tlbr[:, 1]
+def tlbr_to_tlwh(tlbr, legacy_clamp_100=False):
+    """Convert TLBR pixel boxes to TLWH without corrupting image-scale geometry.
 
-    # 转换为TLWH表示
-    tlwh = torch.stack([tlbr[:, 0], tlbr[:, 1], width, height], dim=1).clamp(1, 100)
-    return tlwh
+    The old evaluator applied ``.clamp(1, 100)`` to *all* pixel coordinates and
+    sizes after normalized coordinates had already been scaled to the image. On
+    UAV frames wider/taller than 100 pixels, that caps centers and box sizes and
+    changes both IoU and precision. ``legacy_clamp_100`` is retained only to
+    reproduce previously reported numbers.
+    """
+    width = (tlbr[:, 2] - tlbr[:, 0]).clamp_min(1.0)
+    height = (tlbr[:, 3] - tlbr[:, 1]).clamp_min(1.0)
+    tlwh = torch.stack([tlbr[:, 0], tlbr[:, 1], width, height], dim=1)
+    return tlwh.clamp(1, 100) if legacy_clamp_100 else tlwh
 
 
-def extract_results(filename, plot_bin_gap=0.05, vis=False, exclude_invalid_frames=False):
+def extract_results(filename, plot_bin_gap=0.05, vis=False, exclude_invalid_frames=False,
+                    legacy_clamp_100=False, verbose=False):
 
     with open(filename) as f:
         flat_outputs = [json.loads(line) for line in f]
@@ -181,8 +187,11 @@ def extract_results(filename, plot_bin_gap=0.05, vis=False, exclude_invalid_fram
             if len(pred_bb[0]) < 4:
                 continue
             err_overlap, err_center, err_center_normalized, valid_frame = calc_seq_err_robust(
-                tlbr_to_tlwh(pred_bb), tlbr_to_tlwh(anno_bb), "ours", target_visible=None)
-            print(err_overlap, err_center, err_center_normalized, valid_frame)
+                tlbr_to_tlwh(pred_bb, legacy_clamp_100=legacy_clamp_100),
+                tlbr_to_tlwh(anno_bb, legacy_clamp_100=legacy_clamp_100),
+                "ours", target_visible=None)
+            if verbose:
+                print(err_overlap, err_center, err_center_normalized, valid_frame)
             avg_overlap_all[seq_id, trk_id] = err_overlap[valid_frame].mean()
             if exclude_invalid_frames:
                 seq_length = valid_frame.long().sum()
@@ -242,9 +251,19 @@ if __name__ == '__main__':
 
     argument_parser = ArgumentParser()
     argument_parser.add_argument('file', type=str, help='Path to the file containing the results')
+    argument_parser.add_argument(
+        '--legacy_clamp_100', action='store_true',
+        help='Reproduce the old, incorrect 100-pixel clamp for comparison only.')
+    argument_parser.add_argument('--verbose', action='store_true')
     args = argument_parser.parse_args()
 
-    extract_results(args.file)
+    if args.legacy_clamp_100:
+        print('WARNING: using legacy clamp(1, 100); metrics are not image-scale correct.')
+    extract_results(
+        args.file,
+        legacy_clamp_100=args.legacy_clamp_100,
+        verbose=args.verbose,
+    )
 
 """
 python eval/otb.py /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123/infer_results/merged.jsonl

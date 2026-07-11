@@ -223,7 +223,18 @@ class VideoLLMEvaluator:
         return loader
 
     def predict(self, save_path):
-        f = open(save_path, "a")
+        # Never let multiple distributed ranks append concurrently to the same
+        # JSONL file. It can interleave/corrupt lines, and append mode also mixes
+        # predictions from previous evaluation runs.
+        dist_ready = torch.distributed.is_available() and torch.distributed.is_initialized()
+        rank = torch.distributed.get_rank() if dist_ready else 0
+        world_size = torch.distributed.get_world_size() if dist_ready else 1
+        if world_size > 1:
+            stem, ext = osp.splitext(save_path)
+            rank_save_path = f"{stem}.rank{rank}{ext or '.jsonl'}"
+        else:
+            rank_save_path = save_path
+        f = open(rank_save_path, "w")
 
         generate_params = dict(
             do_sample=False,
@@ -267,13 +278,33 @@ class VideoLLMEvaluator:
             
             for i, pred in enumerate(outputs):
                 pred_boxes = parse_box_from_raw_text(pred)
-                global_box_pool[batch["id"][i]] = pred_boxes[-1]
+                global_box_pool[batch["id"][i]] = pred_boxes[-1] if pred_boxes else [0.0, 0.0, 0.0, 0.0]
 
             list_of_dict = [{key: values[i] for key, values in outputs_dict.items()} for i in range(len(list(outputs_dict.values())[0]))]
             
             for line in list_of_dict:
                 line = to_jsonable(line)
                 f.write(json.dumps(line, ensure_ascii=False) + '\n')
+
+        f.close()
+        if dist_ready:
+            torch.distributed.barrier()
+
+        if world_size > 1 and rank == 0:
+            # Each rank owns complete sequences via LongVideoDistributedSampler,
+            # so deterministic concatenation is sufficient.
+            stem, ext = osp.splitext(save_path)
+            with open(save_path, "w") as merged:
+                for source_rank in range(world_size):
+                    rank_path = f"{stem}.rank{source_rank}{ext or '.jsonl'}"
+                    with open(rank_path, "r") as source:
+                        for line in source:
+                            merged.write(line)
+            print(f"Merged {world_size} rank files into {save_path}")
+
+        if dist_ready:
+            torch.distributed.barrier()
+        return save_path
 
 
 if __name__ == "__main__":

@@ -22,11 +22,11 @@ from transformers.trainer import is_sagemaker_mp_enabled
 from data.video_llm_data import VideoLLMProcessor
 from models.modeling_elysium import ElysiumConfig, ElysiumForCausalLM
 from training.grpo_rewards import (
-    FinalRewardWeights,
     RewardConfig,
-    TrackingComponentWeights,
     compute_batch_tracking_rewards,
     extract_video_description_span,
+    resolve_curriculum_reward_config,
+    reward_config_from_dict,
 )
 
 
@@ -53,6 +53,8 @@ class TrainingArguments(transformers.TrainingArguments):
     remove_unused_columns: bool = field(default=False)
     using_torch_lr: bool = field(default=False)
     lr_type: str = field(default="")
+    # Optional full-state Hugging Face/DeepSpeed resume. Omitted = legacy behavior.
+    resume_from_checkpoint: Optional[str] = field(default=None)
 
 
 class LocalDataset(Dataset):
@@ -269,29 +271,10 @@ class TrackGRPOTrainer(Trainer):
                 p.requires_grad = False
 
         reward_cfg = edict(self.grpo_config.get("reward", {}))
-        tracking_w = edict(reward_cfg.get("tracking_weights", {}))
-        final_w = edict(reward_cfg.get("final_weights", {}))
-        self.reward_cfg = RewardConfig(
-            tracking_weights=TrackingComponentWeights(
-                iou=float(tracking_w.get("iou", 0.65)),
-                center=float(tracking_w.get("center", 0.15)),
-                temporal=float(tracking_w.get("temporal", 0.10)),
-                validity=float(tracking_w.get("validity", 0.10)),
-            ),
-            final_weights=FinalRewardWeights(
-                format=float(final_w.get("format", 0.10)),
-                accuracy=float(final_w.get("accuracy", 0.90)),
-                semantic=float(final_w.get("semantic", 0.00)),
-            ),
-            coordinate_scale=float(reward_cfg.get("coordinate_scale", 100.0)),
-            center_tau=float(reward_cfg.get("center_tau", 10.0)),
-            temporal_tau=float(reward_cfg.get("temporal_tau", 20.0)),
-            count_mismatch_penalty=float(reward_cfg.get("count_mismatch_penalty", 0.50)),
-            clamp_for_metrics=bool(reward_cfg.get("clamp_for_metrics", True)),
-            semantic_gate=float(reward_cfg.get("semantic_gate", 0.05)),
-            format_style=str(reward_cfg.get("format_style", "answer_only")),
-            require_frame_prefix=bool(reward_cfg.get("require_frame_prefix", False)),
-        )
+        # Optional fields default to the legacy reward values. Existing YAML files
+        # therefore remain numerically unchanged.
+        self.reward_cfg = reward_config_from_dict(reward_cfg)
+        self.reward_curriculum_cfg = dict(reward_cfg.get("curriculum", {}) or {})
         self.semantic_rewarder = None
 
     def create_optimizer(self):
@@ -525,21 +508,34 @@ class TrackGRPOTrainer(Trainer):
             self.semantic_rewarder = SigLIPSemanticRewarder(sem_cfg, device=device)
         return self.semantic_rewarder
 
+    def _active_reward_config(self) -> Tuple[RewardConfig, Dict[str, float]]:
+        max_steps = int(getattr(self.state, "max_steps", 0) or 0)
+        if max_steps <= 0:
+            max_steps = int(getattr(self.args, "max_steps", 0) or 0)
+        return resolve_curriculum_reward_config(
+            self.reward_cfg,
+            self.reward_curriculum_cfg,
+            global_step=int(self.state.global_step),
+            max_steps=max_steps,
+        )
+
     def _compute_rewards(self, completion_texts: Sequence[str], batch: Dict[str, torch.Tensor]) -> Tuple[torch.Tensor, Dict[str, float]]:
         num_generations = int(self.grpo_config.get("num_generations", 4))
         gt_expanded = [gt for gt in batch["gt"] for _ in range(num_generations)]
+        active_reward_cfg, curriculum_metrics = self._active_reward_config()
 
         semantic_rewards = None
-        if float(self.reward_cfg.final_weights.semantic) > 0.0:
+        if float(active_reward_cfg.final_weights.semantic) > 0.0:
             frame_chunks = repeat_frame_chunks(batch["frames"], batch["n_frames"], num_generations)
             semantic_rewards = self._get_semantic_rewarder(batch["frames"].device)(completion_texts, frame_chunks)
 
         rewards, metrics = compute_batch_tracking_rewards(
             completion_texts,
             gt_expanded,
-            cfg=self.reward_cfg,
+            cfg=active_reward_cfg,
             semantic_rewards=semantic_rewards,
         )
+        metrics.update(curriculum_metrics)
         reward_tensor = torch.as_tensor(rewards, dtype=torch.float32, device=batch["frames"].device)
         return reward_tensor, metrics
 
@@ -836,7 +832,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         data_collator=processor.batch_transform,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
     trainer.save_state()
     safe_save_model_for_hf_trainer(trainer=trainer, output_dir=training_args.output_dir)
 

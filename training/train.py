@@ -39,6 +39,8 @@ class TrainingArguments(transformers.TrainingArguments):
     remove_unused_columns: bool = field(default=False)
     using_torch_lr: bool = field(default=False)
     lr_type: str = field(default="")
+    # Optional full-state Hugging Face/DeepSpeed resume. Omitted = legacy behavior.
+    resume_from_checkpoint: Optional[str] = field(default=None)
 
 
 class LocalDataset(Dataset):
@@ -189,7 +191,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         data_collator=processor.batch_transform
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=training_args.resume_from_checkpoint)
     trainer.save_state()
     safe_save_model_for_hf_trainer(
         trainer=trainer,
