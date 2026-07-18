@@ -839,5 +839,5 @@ if __name__ == "__main__":
 """
 CUDA_VISIBLE_DEVICES=7 \
 PYTHONPATH=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main \
-deepspeed --master_port=29691 training/train_grpo.py --config configs/sft_grpo_uav123_v2.yaml
+deepspeed --master_port=29691 training/train_grpo.py --config configs/sft_grpo_uav123_v6.yaml
 """

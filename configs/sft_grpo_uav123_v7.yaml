@@ -53,8 +53,6 @@ grpo:
   prompt_suffix: "\nReturn only frame-wise boxes."
 
   reward:
-    # All new fields are optional. Removing curriculum and the four new component
-    # weights reproduces the legacy reward behavior.
     format_style: answer_only
     require_frame_prefix: false
     coordinate_scale: 100.0
