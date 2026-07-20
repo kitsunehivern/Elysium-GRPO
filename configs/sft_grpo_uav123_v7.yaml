@@ -7,7 +7,7 @@ per_device_eval_batch_size: 1
 gradient_accumulation_steps: 4
 evaluation_strategy: "no"
 save_strategy: "steps"
-save_steps: 500
+save_steps: 1000
 save_total_limit: 2
 learning_rate: 2.0e-6
 weight_decay: 0.0
@@ -20,15 +20,15 @@ dataloader_num_workers: 0
 remove_unused_columns: False
 report_to: wandb
 run_name: elysium-7b-sft2k-grpo-curriculum-uav123
-output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo_curriculum_uav123
-eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo_curriculum_uav123
+output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v7
+eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo2k_uav123_v7
 deepspeed: ./configs/zero2.json
 # For a true continuation, point this to output_dir/checkpoint-<step>.
 # resume_from_checkpoint: /path/to/output_dir/checkpoint-1000
 
 model:
   pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
-  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo_curriculum_uav123
+  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v7
 
 grpo:
   num_generations: 8
@@ -86,8 +86,6 @@ grpo:
     curriculum:
       enabled: true
       schedule: linear
-      # Hold the early reward for 400 optimizer steps, interpolate until 1400,
-      # then keep the late reward for the final 600 steps.
       start_step: 400
       end_step: 1400
 
@@ -107,7 +105,6 @@ grpo:
           semantic: 0.00
 
       late:
-        # Professor's two-stage legacy-component proposal.
         tracking_weights:
           iou: 0.60
           center: 0.25

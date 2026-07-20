@@ -63,10 +63,10 @@ grpo:
       iou: 0.45
       center: 0.40
       temporal: 0.05
-      validity: 0.10
+      validity: 0.05
 
     final_weights:
-      format: 0.05
+      format: 0.10
       accuracy: 0.95
       semantic: 0.00
 

@@ -67,7 +67,7 @@ grpo:
 
     final_weights:
       format: 0.10
-      accuracy: 0.90
+      accuracy: 0.95
       semantic: 0.00
 
   semantic_reward:

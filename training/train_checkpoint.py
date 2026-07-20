@@ -196,7 +196,7 @@ if __name__ == "__main__":
     )
 
 """
-CUDA_VISIBLE_DEVICES=1 \
+CUDA_VISIBLE_DEVICES=4 \
 PYTHONPATH=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main \
-deepspeed --master_port=29555 training/train_checkpoint.py --config configs/sft_uav123.yaml
+deepspeed --master_port=29557 training/train_checkpoint.py --config configs/sft_sft_uav123.yaml
 """

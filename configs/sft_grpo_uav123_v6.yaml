@@ -1,13 +1,13 @@
 bf16: True
 seed: 42
 num_train_epochs: 1
-max_steps: 10000
+max_steps: 2000
 per_device_train_batch_size: 1
 per_device_eval_batch_size: 1
 gradient_accumulation_steps: 4
 evaluation_strategy: "no"
 save_strategy: "steps"
-save_steps: 24000
+save_steps: 1000
 save_total_limit: 2
 learning_rate: 2.0e-6
 weight_decay: 0.0
@@ -20,15 +20,15 @@ dataloader_num_workers: 0
 remove_unused_columns: False
 report_to: wandb
 run_name: elysium-7b-sft2k-grpo-curriculum-geometry-uav123
-output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_grpo_uav123_v6
-eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_grpo_uav123_v6
+output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v6
+eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo2k_uav123_v6
 deepspeed: ./configs/zero2.json
 # For a true continuation, point this to output_dir/checkpoint-<step>.
 # resume_from_checkpoint: /path/to/output_dir/checkpoint-1000
 
 model:
-  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_uav123
-  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_grpo_uav123_v6
+  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
+  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v6
 
 grpo:
   num_generations: 8
@@ -41,7 +41,7 @@ grpo:
   clip_epsilon: 0.2
   beta_kl: 0.005
   use_reference_model: true
-  reference_model_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_uav123
+  reference_model_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
   skip_zero_std_groups: true
   min_reward_std: 0.02
   reference_torch_dtype: bf16
@@ -53,8 +53,6 @@ grpo:
   prompt_suffix: "\nReturn only frame-wise boxes."
 
   reward:
-    # All new fields are optional. Removing curriculum and the four new component
-    # weights reproduces the legacy reward behavior.
     format_style: answer_only
     require_frame_prefix: false
     coordinate_scale: 100.0
@@ -88,8 +86,8 @@ grpo:
     curriculum:
       enabled: true
       schedule: linear
-      start_step: 2000
-      end_step: 7000
+      start_step: 400
+      end_step: 1400
 
       early:
         tracking_weights:

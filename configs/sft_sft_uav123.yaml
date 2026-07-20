@@ -1,7 +1,7 @@
 bf16: True
 seed: 42
 num_train_epochs: 1
-max_steps: 10000
+max_steps: 4000
 per_device_train_batch_size: 4
 per_device_eval_batch_size: 4
 gradient_accumulation_steps: 1
@@ -19,13 +19,13 @@ gradient_checkpointing: true
 dataloader_num_workers: 4
 report_to: wandb
 run_name: elysium-7b-sft-sft-uav123
-output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_sft_uav123
-eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft_sft_uav123
+output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_sft2k_uav123
+eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_sft2k_uav123
 deepspeed: ./configs/zero2.json
 
 model:
-  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_uav123
-  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft_sft_uav123
+  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b
+  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_sft2k_uav123
 
 data:
   train:
