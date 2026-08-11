@@ -1,11 +1,11 @@
-with open("/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/eval/eval.py", "r") as f:
+with open("/home/stackops/dhviet/Elysium-GRPO/eval/eval.py", "r") as f:
     script = f.read()
 
 script = "from transformers import BitsAndBytesConfig\nimport torch\n" + script
 
 script = script.replace(
     'model = AutoModelForCausalLM.from_pretrained("elysium_7b"',
-    'model = AutoModelForCausalLM.from_pretrained("/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b"'
+    'model = AutoModelForCausalLM.from_pretrained("/home/stackops/dhviet/Elysium-GRPO/checkpoints/elysium_7b"'
 )
 
 script = script.replace(
@@ -22,7 +22,7 @@ script = script.replace(
 )
 
 
-with open("/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/eval/eval.py", "w") as f:
+with open("/home/stackops/dhviet/Elysium-GRPO/eval/eval.py", "w") as f:
     f.write(script)
 
 print("Patched model path in eval.py")

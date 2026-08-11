@@ -4,32 +4,34 @@ num_train_epochs: 1
 max_steps: 2000
 per_device_train_batch_size: 1
 per_device_eval_batch_size: 1
-gradient_accumulation_steps: 8
+gradient_accumulation_steps: 4
 evaluation_strategy: "no"
 save_strategy: "steps"
-save_steps: 2000
+save_steps: 24000
 save_total_limit: 2
-learning_rate: 1.0e-6
+learning_rate: 2.0e-6
 weight_decay: 0.0
 warmup_ratio: 0.03
 lr_scheduler_type: "cosine"
 logging_steps: 1
 tf32: True
 gradient_checkpointing: True
-dataloader_num_workers: 2
+dataloader_num_workers: 0
 remove_unused_columns: False
 report_to: "none"
-run_name: elysium-7b-grpo-grpo-uav123
-output_dir: /home/stackops/dhviet/Elysium-GRPO/checkpoints/grpo2k_grpo2k_uav123
-eval_dir: /home/stackops/dhviet/Elysium-GRPO/outputs/grpo2k_grpo2k_uav123
+run_name: elysium-7b-sft-grpo-curriculum-geometry-otb100
+output_dir: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft_grpo_otb100_v6
+eval_dir: /home/stackops/dhviet/Elysium-GRPO/outputs/sft_grpo_otb100_v6
 deepspeed: ./configs/zero2.json
+# For a true continuation, point this to output_dir/checkpoint-<step>.
+# resume_from_checkpoint: /path/to/output_dir/checkpoint-1000
 
 model:
-  pretrained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/grpo_uav123_2000
-  trained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/grpo2k_grpo2k_uav123
+  pretrained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft_otb100
+  trained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft_grpo_otb100_v6
 
 grpo:
-  num_generations: 4
+  num_generations: 8
   max_new_tokens: 256
   min_new_tokens: 4
   do_sample: true
@@ -37,10 +39,11 @@ grpo:
   top_p: 0.95
 
   clip_epsilon: 0.2
-  beta_kl: 0.02
+  beta_kl: 0.005
   use_reference_model: true
+  reference_model_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft_otb100
   skip_zero_std_groups: true
-  min_reward_std: 0.0001
+  min_reward_std: 0.02
   reference_torch_dtype: bf16
 
   freeze_visual_encoder: true
@@ -55,20 +58,66 @@ grpo:
     coordinate_scale: 100.0
     center_tau: 10.0
     temporal_tau: 20.0
+    size_tau: 0.70       # log-area ratio temperature
+    aspect_tau: 0.50     # log-aspect-ratio temperature
+    boundary_tau: 5.0    # coordinate overflow temperature
+    jump_tau: 10.0       # excess-motion temperature
+    jump_margin: 2.0     # allowed excess center displacement (0-100 coordinates)
     count_mismatch_penalty: 0.50
     clamp_for_metrics: true
     semantic_gate: 0.05
 
+    # Base/fallback weights. Used unchanged when curriculum.enabled=false.
     tracking_weights:
-      iou: 0.80
-      center: 0.10
+      iou: 0.55
+      center: 0.30
       temporal: 0.05
-      validity: 0.05
+      validity: 0.10
+      size: 0.00
+      aspect: 0.00
+      boundary: 0.00
+      jump: 0.00
 
     final_weights:
-      format: 0.10
-      accuracy: 0.90
+      format: 0.05
+      accuracy: 0.95
       semantic: 0.00
+
+    curriculum:
+      enabled: true
+      schedule: linear
+      start_step: 400
+      end_step: 1400
+
+      early:
+        tracking_weights:
+          iou: 0.40
+          center: 0.35
+          temporal: 0.10
+          validity: 0.15
+          size: 0.00
+          aspect: 0.00
+          boundary: 0.00
+          jump: 0.00
+        final_weights:
+          format: 0.20
+          accuracy: 0.80
+          semantic: 0.00
+
+      late:
+        tracking_weights:
+          iou: 0.45
+          center: 0.25
+          size: 0.10
+          aspect: 0.05
+          temporal: 0.10
+          validity: 0.05
+          boundary: 0.00
+          jump: 0.00
+        final_weights:
+          format: 0.10
+          accuracy: 0.90
+          semantic: 0.00
 
   semantic_reward:
     enabled: false
@@ -84,11 +133,11 @@ data:
   train:
     data_fetch:
       data_paths: [{
-          "anno_path": /home/stackops/dhviet/UAV123_Elysium/train/annotation.jsonl,
-          "image_folder": /home/stackops/dhviet/UAV123_Elysium/frames,
+          "anno_path": /home/stackops/dhviet/OTB100_Elysium/train/annotation.jsonl,
+          "image_folder": /home/stackops/dhviet/OTB100_Elysium,
         }]
       batch_sizes: [1]
-      num_workers: 2
+      num_workers: 0
       num_readers: [2]
       key_mapping:
       multi_round_qa: true
@@ -131,8 +180,8 @@ data:
           std: [0.26862954, 0.26130258, 0.27577711]
   predict:
     data_fetch:
-      anno_path: /home/stackops/dhviet/UAV123_Elysium/test/annotation.jsonl
-      image_folder: /home/stackops/dhviet/UAV123_Elysium/frames
+      anno_path: /home/stackops/dhviet/OTB100_Elysium/test/annotation.jsonl
+      image_folder: /home/stackops/dhviet/OTB100_Elysium
       batch_sizes: [1]
       num_workers: 1
       num_readers: [2]

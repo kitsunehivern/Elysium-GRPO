@@ -595,7 +595,7 @@ class TrackGRPOTrainer(Trainer):
         except TypeError:
             # Older transformers versions do not have the `metrics` argument.
             super()._save_checkpoint(model, trial)
-        self._save_named_model_checkpoint(int(self.state.global_step))
+        # self._save_named_model_checkpoint(int(self.state.global_step))
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         num_generations = int(self.grpo_config.get("num_generations", 4))
@@ -838,6 +838,6 @@ if __name__ == "__main__":
 
 """
 CUDA_VISIBLE_DEVICES=1 \
-PYTHONPATH=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main \
-deepspeed --master_port=29691 training/train_grpo.py --config configs/sft_grpo_uav123_v6.yaml
+PYTHONPATH=/home/stackops/dhviet/Elysium-GRPO \
+deepspeed --master_port=29691 training/train_grpo.py --config configs/sft_grpo_otb100_v6.yaml
 """

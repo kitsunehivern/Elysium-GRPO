@@ -335,6 +335,6 @@ if __name__ == "__main__":
 
 """
 CUDA_VISIBLE_DEVICES=6 \
-PYTHONPATH=/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main \
-deepspeed --master_port=29887 eval/eval.py --config configs/sft_grpo_uav123_v2.yaml --task SOT
+PYTHONPATH=/home/stackops/dhviet/Elysium-GRPO \
+deepspeed --master_port=29889 eval/eval.py --config configs/sft_sft_otb100.yaml --task SOT
 """

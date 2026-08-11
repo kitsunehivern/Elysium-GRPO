@@ -266,5 +266,5 @@ if __name__ == '__main__':
     )
 
 """
-python eval/otb.py /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo2k_uav123_v7/infer_results/merged.jsonl --legacy_clamp_100
+python eval/otb.py /home/stackops/dhviet/Elysium-GRPO/outputs/sft_grpo_otb100_v6/infer_results/merged.jsonl
 """

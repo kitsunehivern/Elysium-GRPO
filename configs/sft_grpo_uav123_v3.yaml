@@ -18,15 +18,15 @@ tf32: True
 gradient_checkpointing: True
 dataloader_num_workers: 0
 remove_unused_columns: False
-report_to: wandb
+report_to: "none"
 run_name: elysium-7b-sft-grpo-uav123
-output_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v3
-eval_dir: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/outputs/sft2k_grpo2k_uav123_v3
+output_dir: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft2k_grpo2k_uav123_v3
+eval_dir: /home/stackops/dhviet/Elysium-GRPO/outputs/sft2k_grpo2k_uav123_v3
 deepspeed: ./configs/zero2.json
 
 model:
-  pretrained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_uav123
-  trained_model_name_or_path: /raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/sft2k_grpo2k_uav123_v3
+  pretrained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft2k_uav123
+  trained_model_name_or_path: /home/stackops/dhviet/Elysium-GRPO/checkpoints/sft2k_grpo2k_uav123_v3
 
 grpo:
   num_generations: 8
@@ -84,8 +84,8 @@ data:
   train:
     data_fetch:
       data_paths: [{
-          "anno_path": /raid/hvtham/dhviet/UAV123_Elysium/train/annotation.jsonl,
-          "image_folder": /raid/hvtham/dhviet/UAV123_Elysium/frames,
+          "anno_path": /home/stackops/dhviet/UAV123_Elysium/train/annotation.jsonl,
+          "image_folder": /home/stackops/dhviet/UAV123_Elysium/frames,
         }]
       batch_sizes: [1]
       num_workers: 0
@@ -131,8 +131,8 @@ data:
           std: [0.26862954, 0.26130258, 0.27577711]
   predict:
     data_fetch:
-      anno_path: /raid/hvtham/dhviet/UAV123_Elysium/test/annotation.jsonl
-      image_folder: /raid/hvtham/dhviet/UAV123_Elysium/frames
+      anno_path: /home/stackops/dhviet/UAV123_Elysium/test/annotation.jsonl
+      image_folder: /home/stackops/dhviet/UAV123_Elysium/frames
       batch_sizes: [1]
       num_workers: 1
       num_readers: [2]

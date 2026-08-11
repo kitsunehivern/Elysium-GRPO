@@ -2,7 +2,7 @@ import re
 
 paths = [
     # "/root/.cache/huggingface/modules/transformers_modules/elysium_7b/modeling_elysium.py",
-    "/raid/hvtham/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b/modeling_elysium.py"
+    "/home/stackops/dhviet/ElysiumGRPO/Elysium-main/checkpoints/elysium_7b/modeling_elysium.py"
 ]
 
 for path in paths:
